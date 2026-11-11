@@ -1,15 +1,21 @@
 <Window x:Class="PsychicIsland.MainWindow" xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
- Title="Psychic Island · 灵动岛" Width="252" Height="72" WindowStyle="None" ResizeMode="NoResize" AllowsTransparency="True" Background="Transparent" Topmost="True" ShowInTaskbar="False" FontFamily="Segoe UI, Microsoft YaHei UI" Foreground="White" UseLayoutRounding="True">
- <Border x:Name="Island" Margin="10" Padding="18,0" Background="#08080B" CornerRadius="27" BorderBrush="#303036" BorderThickness="1" MouseEnter="OnEnter" MouseLeave="OnLeave" MouseLeftButtonDown="OnDrag">
-  <Border.Effect><DropShadowEffect BlurRadius="12" ShadowDepth="2" Opacity="0.35"/></Border.Effect>
-  <Grid>
-   <Grid.RowDefinitions><RowDefinition Height="50"/><RowDefinition Height="*"/></Grid.RowDefinitions>
-   <Grid>
-    <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
-    <StackPanel Orientation="Horizontal" VerticalAlignment="Center"><Ellipse x:Name="Dot" Width="7" Height="7" Fill="#A6ADC0" Margin="0,0,10,0"/><TextBlock x:Name="Clock" FontSize="20" FontWeight="SemiBold" VerticalAlignment="Center"/></StackPanel>
-    <TextBlock x:Name="CompactStatus" Grid.Column="1" Text="◷" Foreground="#A6ADC0" FontSize="18" VerticalAlignment="Center" Margin="12,0,0,0"/>
-   </Grid>
-   <StackPanel x:Name="Details" Grid.Row="1" Visibility="Collapsed">
+ Title="Psychic Island · 灵动岛" Width="372" Height="72" WindowStyle="None" ResizeMode="NoResize" AllowsTransparency="True" Background="Transparent" Topmost="True" ShowInTaskbar="False" FontFamily="Segoe UI, Microsoft YaHei UI" Foreground="White" UseLayoutRounding="True">
+ <Canvas x:Name="Island" Width="352" Height="280" Margin="10" VerticalAlignment="Top" HorizontalAlignment="Center"
+         MouseLeftButtonDown="OnPointerDown" MouseMove="OnPointerMove" MouseLeftButtonUp="OnPointerUp" ToolTip="点击顶部展开 / 收起 · 拖动顶部移动">
+  <Canvas.Clip><RectangleGeometry x:Name="PillClip" Rect="60,0,232,52" RadiusX="26" RadiusY="26"/></Canvas.Clip>
+  <Path Data="{Binding Clip, ElementName=Island}" Fill="#08080B" Stroke="#303036" StrokeThickness="1"/>
+  <Grid Canvas.Left="19" Canvas.Top="1" Width="314" Height="50" Cursor="Hand">
+   <StackPanel Orientation="Horizontal" VerticalAlignment="Center" HorizontalAlignment="Left">
+    <StackPanel.RenderTransform><TranslateTransform x:Name="ClockOffset" X="60"/></StackPanel.RenderTransform>
+    <Ellipse x:Name="Dot" Width="7" Height="7" Fill="#A6ADC0" Margin="0,0,10,0"/>
+    <TextBlock x:Name="Clock" FontSize="20" FontWeight="SemiBold" VerticalAlignment="Center"/>
+   </StackPanel>
+   <TextBlock x:Name="CompactStatus" Text="◷" Foreground="#A6ADC0" FontSize="18" VerticalAlignment="Center" HorizontalAlignment="Right">
+    <TextBlock.RenderTransform><TranslateTransform x:Name="StatusOffset" X="-60"/></TextBlock.RenderTransform>
+   </TextBlock>
+  </Grid>
+   <StackPanel x:Name="Details" Canvas.Left="19" Canvas.Top="51" Width="314" Visibility="Hidden" Opacity="0" IsHitTestVisible="False">
+    <StackPanel.RenderTransform><TranslateTransform x:Name="DetailsOffset" Y="12"/></StackPanel.RenderTransform>
     <TextBlock x:Name="DateText" Foreground="#92929D" FontSize="11" Margin="0,0,0,15"/>
     <Grid Margin="0,0,0,15">
      <Grid.ColumnDefinitions><ColumnDefinition Width="58"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
@@ -23,8 +29,7 @@
      <Button x:Name="Play" Content="▶" ToolTip="播放 / 暂停" AutomationProperties.Name="播放或暂停" Margin="18,0" Width="56" Background="#51477A" Click="OnPlay" IsEnabled="False"/>
      <Button x:Name="Next" Content="⏭" ToolTip="下一首" AutomationProperties.Name="下一首" Click="OnNext" IsEnabled="False"/>
     </StackPanel>
-    <TextBlock x:Name="Hint" Text="拖动顶部移动 · 右键打开菜单" FontSize="10" Foreground="#777782" HorizontalAlignment="Center" Margin="0,12,0,0" TextTrimming="CharacterEllipsis"/>
+    <TextBlock x:Name="Hint" Text="点击顶部收起 · 拖动移动 · 右键菜单" FontSize="10" Foreground="#777782" HorizontalAlignment="Center" Margin="0,12,0,0" TextTrimming="CharacterEllipsis"/>
    </StackPanel>
-  </Grid>
- </Border>
+ </Canvas>
 </Window>

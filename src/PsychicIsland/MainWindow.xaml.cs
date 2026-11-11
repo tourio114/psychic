@@ -7,6 +7,7 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
+using System.Windows.Media.Animation;
 using System.Windows.Media.Imaging;
 using System.Windows.Threading;
 using Windows.Media.Control;
@@ -17,19 +18,20 @@ namespace PsychicIsland;
 public partial class MainWindow : Window
 {
     private readonly DispatcherTimer tick = new() { Interval = TimeSpan.FromSeconds(1) };
-    private readonly DispatcherTimer motion = new() { Interval = TimeSpan.FromMilliseconds(16) };
-    private readonly DispatcherTimer collapse = new() { Interval = TimeSpan.FromMilliseconds(450) };
     private readonly Forms.NotifyIcon tray;
     private readonly Preferences preferences = Preferences.Load();
     private GlobalSystemMediaTransportControlsSessionManager? manager;
     private GlobalSystemMediaTransportControlsSession? session;
-    private bool busy, expanded, closed, commandBusy;
+    private bool busy, expanded, closed, commandBusy, transitioning, pointerDown;
+    private Point pressPoint;
+    private int transitionVersion;
     private double anchor;
     private string artworkKey = "";
 
     public MainWindow()
     {
         InitializeComponent();
+        Island.LostMouseCapture += (_, _) => pointerDown = false;
         ContextMenu = BuildMenu();
         var menu = new Forms.ContextMenuStrip();
         menu.Items.Add("显示灵动岛", null, (_, _) => Dispatcher.Invoke(() => { Show(); Activate(); }));
@@ -50,10 +52,12 @@ public partial class MainWindow : Window
             _ = RefreshMedia();
         };
         tick.Tick += (_, _) => { UpdateClock(); _ = RefreshMedia(); };
-        collapse.Tick += (_, _) => { collapse.Stop(); if (!Island.IsMouseOver && ContextMenu?.IsOpen != true) SetExpanded(false); };
-        ContextMenu.Closed += (_, _) => collapse.Start();
+        Deactivated += (_, _) => Dispatcher.BeginInvoke(() =>
+        {
+            if (!IsActive && ContextMenu?.IsOpen != true) SetExpanded(false);
+        });
         KeyDown += (_, e) => { if (e.Key == Key.Escape) SetExpanded(false); };
-        Closed += (_, _) => { closed = true; tick.Stop(); collapse.Stop(); motion.Stop(); SystemParameters.StaticPropertyChanged -= OnDisplaySettingsChanged; tray.Dispose(); SavePosition(); };
+        Closed += (_, _) => { closed = true; tick.Stop(); SystemParameters.StaticPropertyChanged -= OnDisplaySettingsChanged; tray.Dispose(); SavePosition(); };
         SystemParameters.StaticPropertyChanged += OnDisplaySettingsChanged;
     }
 
@@ -78,7 +82,6 @@ public partial class MainWindow : Window
     private void ToggleClock() { preferences.Use24Hour = !preferences.Use24Hour; preferences.Save(); UpdateClock(); }
     private void ResetPosition()
     {
-        StopMotion();
         anchor = SystemParameters.WorkArea.Left + SystemParameters.WorkArea.Width / 2;
         Left = anchor - Width / 2; Top = SystemParameters.WorkArea.Top + 8;
         SavePosition();
@@ -95,51 +98,81 @@ public partial class MainWindow : Window
     {
         if (closed) { SystemParameters.StaticPropertyChanged -= OnDisplaySettingsChanged; return; }
         if (e.PropertyName is nameof(SystemParameters.WorkArea) or nameof(SystemParameters.VirtualScreenWidth) or nameof(SystemParameters.VirtualScreenHeight))
-            Dispatcher.BeginInvoke(() => { StopMotion(); ClampPosition(); SavePosition(); });
-    }
-    private EventHandler? motionFrame;
-    private void StopMotion()
-    {
-        motion.Stop();
-        if (motionFrame is not null) motion.Tick -= motionFrame;
-        motionFrame = null;
+            Dispatcher.BeginInvoke(() => { ClampPosition(); SavePosition(); });
     }
     private void SetExpanded(bool value)
     {
         if (expanded == value) return;
         expanded = value;
-        StopMotion();
-        Details.Visibility = value ? Visibility.Visible : Visibility.Collapsed;
-        double targetWidth = value ? 372 : 252, targetHeight = value ? 300 : 72;
-        double initialWidth = ActualWidth, initialHeight = ActualHeight;
-        var started = System.Diagnostics.Stopwatch.StartNew();
-        // Resize both native dimensions together on each frame. Independent WPF
-        // Window animations can overwrite each other's dimensions through WM_SIZE.
-        motionFrame = (_, _) =>
+        transitioning = true;
+        int version = ++transitionVersion;
+        // The native host resizes only at transition boundaries. The fixed content
+        // layout stays unchanged while WPF animates a lightweight rounded clip.
+        if (value) { Height = 300; Details.Visibility = Visibility.Visible; }
+        Details.IsHitTestVisible = value;
+        var duration = TimeSpan.FromMilliseconds(value ? 380 : 280);
+        var easing = new QuinticEase { EasingMode = EasingMode.EaseOut };
+        var shape = new RectAnimation
         {
-            double progress = Math.Clamp(started.Elapsed.TotalMilliseconds / 230, 0, 1);
-            double eased = 1 - Math.Pow(1 - progress, 3);
-            Width = initialWidth + (targetWidth - initialWidth) * eased;
-            Height = initialHeight + (targetHeight - initialHeight) * eased;
-            Left = anchor - Width / 2;
-            if (progress >= 1) StopMotion();
+            From = PillClip.Rect,
+            To = value ? new Rect(0, 0, 352, 280) : new Rect(60, 0, 232, 52),
+            Duration = duration, EasingFunction = easing
         };
-        motion.Tick += motionFrame;
-        motion.Start();
+        shape.Completed += (_, _) =>
+        {
+            if (closed || version != transitionVersion) return;
+            transitioning = false;
+            if (!expanded) { Details.Visibility = Visibility.Hidden; Height = 72; }
+            _ = RefreshMedia();
+        };
+        PillClip.BeginAnimation(RectangleGeometry.RectProperty, shape);
+        Animate(ClockOffset, TranslateTransform.XProperty, value ? 0 : 60, duration, easing);
+        Animate(StatusOffset, TranslateTransform.XProperty, value ? 0 : -60, duration, easing);
+        Animate(DetailsOffset, TranslateTransform.YProperty, value ? 0 : 12, duration, easing);
+        var fade = new DoubleAnimation(value ? 1 : 0, TimeSpan.FromMilliseconds(value ? 220 : 100))
+        {
+            From = Details.Opacity,
+            BeginTime = TimeSpan.FromMilliseconds(value ? 80 : 0),
+            EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut }
+        };
+        Details.BeginAnimation(OpacityProperty, fade);
     }
-    private void OnEnter(object sender, MouseEventArgs e) { collapse.Stop(); SetExpanded(true); }
-    private void OnLeave(object sender, MouseEventArgs e) { collapse.Stop(); collapse.Start(); }
-    private void OnDrag(object sender, MouseButtonEventArgs e)
+    private static void Animate(Animatable target, DependencyProperty property, double value, TimeSpan duration, IEasingFunction easing)
+        => target.BeginAnimation(property, new DoubleAnimation((double)target.GetValue(property), value, duration) { EasingFunction = easing });
+
+    private void OnPointerDown(object sender, MouseButtonEventArgs e)
     {
-        if (e.GetPosition(Island).Y > 50) return;
-        StopMotion();
+        if (e.GetPosition(Island).Y > 52) return;
+        Activate();
+        pressPoint = e.GetPosition(this);
+        pointerDown = true;
+        Island.CaptureMouse();
+        e.Handled = true;
+    }
+    private void OnPointerMove(object sender, MouseEventArgs e)
+    {
+        if (!pointerDown || e.LeftButton != MouseButtonState.Pressed) return;
+        var point = e.GetPosition(this);
+        if (Math.Abs(point.X - pressPoint.X) < SystemParameters.MinimumHorizontalDragDistance &&
+            Math.Abs(point.Y - pressPoint.Y) < SystemParameters.MinimumVerticalDragDistance) return;
+        pointerDown = false;
+        Island.ReleaseMouseCapture();
         try { DragMove(); } catch (InvalidOperationException) { }
         ClampPosition(); SavePosition();
+    }
+    private void OnPointerUp(object sender, MouseButtonEventArgs e)
+    {
+        if (!pointerDown) return;
+        pointerDown = false;
+        Island.ReleaseMouseCapture();
+        if (e.GetPosition(Island).Y is >= 0 and <= 52 && PillClip.FillContains(e.GetPosition(Island)))
+            SetExpanded(!expanded);
+        e.Handled = true;
     }
 
     private async Task RefreshMedia()
     {
-        if (busy || closed) return;
+        if (busy || closed || transitioning) return;
         busy = true;
         try
         {
@@ -157,7 +190,7 @@ public partial class MainWindow : Window
             Dot.Fill = new SolidColorBrush((Color)ColorConverter.ConvertFromString(playing ? "#A998FF" : "#A6ADC0"));
             CompactStatus.Text = playing ? "♫" : "◷";
             var properties = await current.TryGetMediaPropertiesAsync();
-            if (closed) return;
+            if (closed || transitioning) return;
             Track.Text = string.IsNullOrWhiteSpace(properties.Title) ? "系统媒体播放器" : properties.Title;
             Artist.Text = string.IsNullOrWhiteSpace(properties.Artist) ? current.SourceAppUserModelId : properties.Artist;
             Track.ToolTip = Track.Text; Artist.ToolTip = Artist.Text;
@@ -169,7 +202,7 @@ public partial class MainWindow : Window
             position = TimeSpan.FromSeconds(Math.Clamp(position.TotalSeconds, 0, Math.Max(0, total.TotalSeconds)));
             Progress.Value = total.TotalSeconds > 0 ? position.TotalSeconds / total.TotalSeconds : 0;
             Elapsed.Text = FormatTime(position); DurationText.Text = FormatTime(total);
-            Hint.Text = "拖动顶部移动 · 右键打开菜单";
+            Hint.Text = "点击顶部收起 · 拖动移动 · 右键菜单";
             string key = current.SourceAppUserModelId + "|" + properties.Title + "|" + properties.Artist + "|" + properties.AlbumTitle;
             if (key != artworkKey)
             {

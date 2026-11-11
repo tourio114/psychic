@@ -12,6 +12,7 @@ jobs:
     runs-on: windows-latest
     timeout-minutes: 20
     strategy:
+      fail-fast: false
       matrix:
         rid: [win-x64, win-arm64]
     steps:

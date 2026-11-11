@@ -1,0 +1,30 @@
+<Window x:Class="PsychicIsland.MainWindow" xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+ Title="Psychic Island · 灵动岛" Width="252" Height="72" WindowStyle="None" ResizeMode="NoResize" AllowsTransparency="True" Background="Transparent" Topmost="True" ShowInTaskbar="False" FontFamily="Segoe UI, Microsoft YaHei UI" Foreground="White" UseLayoutRounding="True">
+ <Border x:Name="Island" Margin="10" Padding="18,0" Background="#08080B" CornerRadius="27" BorderBrush="#303036" BorderThickness="1" MouseEnter="OnEnter" MouseLeave="OnLeave" MouseLeftButtonDown="OnDrag">
+  <Border.Effect><DropShadowEffect BlurRadius="12" ShadowDepth="2" Opacity="0.35"/></Border.Effect>
+  <Grid>
+   <Grid.RowDefinitions><RowDefinition Height="50"/><RowDefinition Height="*"/></Grid.RowDefinitions>
+   <Grid>
+    <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+    <StackPanel Orientation="Horizontal" VerticalAlignment="Center"><Ellipse x:Name="Dot" Width="7" Height="7" Fill="#A6ADC0" Margin="0,0,10,0"/><TextBlock x:Name="Clock" FontSize="20" FontWeight="SemiBold" VerticalAlignment="Center"/></StackPanel>
+    <TextBlock x:Name="CompactStatus" Grid.Column="1" Text="◷" Foreground="#A6ADC0" FontSize="18" VerticalAlignment="Center" Margin="12,0,0,0"/>
+   </Grid>
+   <StackPanel x:Name="Details" Grid.Row="1" Visibility="Collapsed">
+    <TextBlock x:Name="DateText" Foreground="#92929D" FontSize="11" Margin="0,0,0,15"/>
+    <Grid Margin="0,0,0,15">
+     <Grid.ColumnDefinitions><ColumnDefinition Width="58"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+     <Border Width="46" Height="46" CornerRadius="12" Background="#24242D" HorizontalAlignment="Left"><Grid><TextBlock Text="♫" FontSize="25" Foreground="#B7ACFF" HorizontalAlignment="Center" VerticalAlignment="Center"/><Image x:Name="Artwork" Stretch="UniformToFill"/></Grid></Border>
+     <StackPanel Grid.Column="1" VerticalAlignment="Center"><TextBlock x:Name="Track" Text="现在，享受片刻宁静" FontSize="15" FontWeight="SemiBold" TextTrimming="CharacterEllipsis"/><TextBlock x:Name="Artist" Text="播放音乐后，即可在这里控制" Foreground="#92929D" FontSize="12" TextTrimming="CharacterEllipsis" Margin="0,5,0,0"/></StackPanel>
+    </Grid>
+    <ProgressBar x:Name="Progress" Height="3" Minimum="0" Maximum="1" Value="0" Foreground="#B7ACFF" Background="#292930" BorderThickness="0"/>
+    <Grid Margin="0,6,0,10"><TextBlock x:Name="Elapsed" Text="0:00" FontSize="10" Foreground="#92929D"/><TextBlock x:Name="DurationText" Text="0:00" HorizontalAlignment="Right" FontSize="10" Foreground="#92929D"/></Grid>
+    <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
+     <Button x:Name="Previous" Content="⏮" ToolTip="上一首" AutomationProperties.Name="上一首" Click="OnPrevious" IsEnabled="False"/>
+     <Button x:Name="Play" Content="▶" ToolTip="播放 / 暂停" AutomationProperties.Name="播放或暂停" Margin="18,0" Width="56" Background="#51477A" Click="OnPlay" IsEnabled="False"/>
+     <Button x:Name="Next" Content="⏭" ToolTip="下一首" AutomationProperties.Name="下一首" Click="OnNext" IsEnabled="False"/>
+    </StackPanel>
+    <TextBlock x:Name="Hint" Text="拖动顶部移动 · 右键打开菜单" FontSize="10" Foreground="#777782" HorizontalAlignment="Center" Margin="0,12,0,0" TextTrimming="CharacterEllipsis"/>
+   </StackPanel>
+  </Grid>
+ </Border>
+</Window>

@@ -7,7 +7,6 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
-using System.Windows.Media.Animation;
 using System.Windows.Media.Imaging;
 using System.Windows.Threading;
 using Windows.Media.Control;
@@ -18,6 +17,7 @@ namespace PsychicIsland;
 public partial class MainWindow : Window
 {
     private readonly DispatcherTimer tick = new() { Interval = TimeSpan.FromSeconds(1) };
+    private readonly DispatcherTimer motion = new() { Interval = TimeSpan.FromMilliseconds(16) };
     private readonly DispatcherTimer collapse = new() { Interval = TimeSpan.FromMilliseconds(450) };
     private readonly Forms.NotifyIcon tray;
     private readonly Preferences preferences = Preferences.Load();
@@ -53,7 +53,7 @@ public partial class MainWindow : Window
         collapse.Tick += (_, _) => { collapse.Stop(); if (!Island.IsMouseOver && ContextMenu?.IsOpen != true) SetExpanded(false); };
         ContextMenu.Closed += (_, _) => collapse.Start();
         KeyDown += (_, e) => { if (e.Key == Key.Escape) SetExpanded(false); };
-        Closed += (_, _) => { closed = true; tick.Stop(); collapse.Stop(); tray.Dispose(); SavePosition(); };
+        Closed += (_, _) => { closed = true; tick.Stop(); collapse.Stop(); motion.Stop(); SystemParameters.StaticPropertyChanged -= OnDisplaySettingsChanged; tray.Dispose(); SavePosition(); };
         SystemParameters.StaticPropertyChanged += OnDisplaySettingsChanged;
     }
 
@@ -97,23 +97,35 @@ public partial class MainWindow : Window
         if (e.PropertyName is nameof(SystemParameters.WorkArea) or nameof(SystemParameters.VirtualScreenWidth) or nameof(SystemParameters.VirtualScreenHeight))
             Dispatcher.BeginInvoke(() => { StopMotion(); ClampPosition(); SavePosition(); });
     }
+    private EventHandler? motionFrame;
     private void StopMotion()
     {
-        double width = Width, height = Height, left = Left;
-        BeginAnimation(WidthProperty, null); BeginAnimation(HeightProperty, null); BeginAnimation(LeftProperty, null);
-        Width = width; Height = height; Left = left;
+        motion.Stop();
+        if (motionFrame is not null) motion.Tick -= motionFrame;
+        motionFrame = null;
     }
     private void SetExpanded(bool value)
     {
         if (expanded == value) return;
         expanded = value;
+        StopMotion();
         Details.Visibility = value ? Visibility.Visible : Visibility.Collapsed;
-        double width = value ? 372 : 252;
-        var duration = TimeSpan.FromMilliseconds(230);
-        var easing = new CubicEase { EasingMode = EasingMode.EaseOut };
-        BeginAnimation(WidthProperty, new DoubleAnimation(width, duration) { EasingFunction = easing });
-        BeginAnimation(HeightProperty, new DoubleAnimation(value ? 300 : 72, duration) { EasingFunction = easing });
-        BeginAnimation(LeftProperty, new DoubleAnimation(anchor - width / 2, duration) { EasingFunction = easing });
+        double targetWidth = value ? 372 : 252, targetHeight = value ? 300 : 72;
+        double initialWidth = ActualWidth, initialHeight = ActualHeight;
+        var started = System.Diagnostics.Stopwatch.StartNew();
+        // Resize both native dimensions together on each frame. Independent WPF
+        // Window animations can overwrite each other's dimensions through WM_SIZE.
+        motionFrame = (_, _) =>
+        {
+            double progress = Math.Clamp(started.Elapsed.TotalMilliseconds / 230, 0, 1);
+            double eased = 1 - Math.Pow(1 - progress, 3);
+            Width = initialWidth + (targetWidth - initialWidth) * eased;
+            Height = initialHeight + (targetHeight - initialHeight) * eased;
+            Left = anchor - Width / 2;
+            if (progress >= 1) StopMotion();
+        };
+        motion.Tick += motionFrame;
+        motion.Start();
     }
     private void OnEnter(object sender, MouseEventArgs e) { collapse.Stop(); SetExpanded(true); }
     private void OnLeave(object sender, MouseEventArgs e) { collapse.Stop(); collapse.Start(); }

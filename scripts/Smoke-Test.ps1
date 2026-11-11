@@ -41,7 +41,10 @@ try {
     [System.Windows.Forms.Cursor]::Position = New-Object System.Drawing.Point([int]($rect.X + $rect.Width / 2), [int]($rect.Y + 30))
     Start-Sleep -Seconds 2
     $control = $window.FindFirst([System.Windows.Automation.TreeScope]::Descendants, $condition)
+    $expandedRect = $window.Current.BoundingRectangle
+    Write-Host "Window bounds after hover: $expandedRect"
     if ($null -eq $control) { throw 'Expanded media controls were not found.' }
+    Write-Host "Control offscreen: $($control.Current.IsOffscreen)"
     Add-Type -AssemblyName System.Drawing
     $screen = [System.Windows.Forms.SystemInformation]::VirtualScreen
     $bitmap = New-Object System.Drawing.Bitmap($screen.Width, $screen.Height)
@@ -50,6 +53,7 @@ try {
         $graphics.CopyFromScreen($screen.Location, [System.Drawing.Point]::Empty, $screen.Size)
         $bitmap.Save((Join-Path $PWD 'smoke-screenshot.png'))
     } finally { $graphics.Dispose(); $bitmap.Dispose() }
+    if ($expandedRect.Height -lt 260 -or $control.Current.IsOffscreen) { throw 'Hover did not visibly expand the media panel.' }
     if (![IslandNative]::PostMessage($handle, 0x0010, [IntPtr]::Zero, [IntPtr]::Zero)) { throw 'Window did not accept close.' }
     if (!$process.WaitForExit(10000)) { throw 'Application did not shut down cleanly.' }
     if ($process.ExitCode -ne 0) { throw "Application exit code: $($process.ExitCode)" }

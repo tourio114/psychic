@@ -11,6 +11,8 @@ public static class IslandNative {
     [DllImport("user32.dll", CharSet=CharSet.Unicode)] public static extern int GetWindowText(IntPtr window, StringBuilder text, int count);
     [DllImport("user32.dll")] public static extern bool PostMessage(IntPtr window, uint message, IntPtr wparam, IntPtr lparam);
     [DllImport("user32.dll")] public static extern bool SetForegroundWindow(IntPtr window);
+    [StructLayout(LayoutKind.Sequential)] public struct Point { public int X; public int Y; public Point(int x, int y) { X=x; Y=y; } }
+    [DllImport("user32.dll")] public static extern IntPtr WindowFromPoint(Point point);
     [DllImport("user32.dll")] public static extern void mouse_event(uint flags, uint dx, uint dy, uint data, UIntPtr extraInfo);
     public static IntPtr Find(uint id) {
         IntPtr found = IntPtr.Zero;
@@ -42,6 +44,8 @@ try {
     [System.Windows.Forms.Cursor]::Position = New-Object System.Drawing.Point([int]($rect.X + $rect.Width / 2), [int]($rect.Y + 30))
     Start-Sleep -Seconds 2
     if ($window.Current.BoundingRectangle.Height -gt 100) { throw 'Hover unexpectedly expanded the island.' }
+    $emptyPoint = New-Object IslandNative+Point([int]($rect.X + 20), [int]($rect.Y + 30))
+    if ([IslandNative]::WindowFromPoint($emptyPoint) -eq $handle) { throw 'Transparent compact margins blocked the desktop.' }
     function Click-Header {
         $bounds = $window.Current.BoundingRectangle
         [System.Windows.Forms.Cursor]::Position = New-Object System.Drawing.Point([int]($bounds.X + $bounds.Width / 2), [int]($bounds.Y + 30))
@@ -84,10 +88,23 @@ try {
     [System.Windows.Forms.SendKeys]::SendWait('{ESC}')
     Start-Sleep -Seconds 1
     if ($window.Current.BoundingRectangle.Height -gt 100) { throw 'Escape did not collapse the island.' }
+    $beforeDrag = $window.Current.BoundingRectangle
+    [System.Windows.Forms.Cursor]::Position = New-Object System.Drawing.Point([int]($beforeDrag.X + $beforeDrag.Width / 2), [int]($beforeDrag.Y + 30))
+    [IslandNative]::mouse_event(2, 0, 0, 0, [UIntPtr]::Zero)
+    Start-Sleep -Milliseconds 100
+    [System.Windows.Forms.Cursor]::Position = New-Object System.Drawing.Point([int]($beforeDrag.X + $beforeDrag.Width / 2 + 70), [int]($beforeDrag.Y + 60))
+    Start-Sleep -Milliseconds 100
+    [System.Windows.Forms.Cursor]::Position = New-Object System.Drawing.Point([int]($beforeDrag.X + $beforeDrag.Width / 2 + 100), [int]($beforeDrag.Y + 70))
+    Start-Sleep -Milliseconds 100
+    [IslandNative]::mouse_event(4, 0, 0, 0, [UIntPtr]::Zero)
+    Start-Sleep -Seconds 1
+    $afterDrag = $window.Current.BoundingRectangle
+    if ($afterDrag.Height -gt 100) { throw 'Dragging incorrectly toggled expansion.' }
+    if ([Math]::Abs($afterDrag.X - $beforeDrag.X) -lt 10 -and [Math]::Abs($afterDrag.Y - $beforeDrag.Y) -lt 10) { throw 'Dragging did not move the island.' }
     if (![IslandNative]::PostMessage($handle, 0x0010, [IntPtr]::Zero, [IntPtr]::Zero)) { throw 'Window did not accept close.' }
     if (!$process.WaitForExit(10000)) { throw 'Application did not shut down cleanly.' }
     if ($process.ExitCode -ne 0) { throw "Application exit code: $($process.ExitCode)" }
-    Write-Host 'PASS: startup, hover stays compact, click expansion/collapse, pointer leave, rapid reversal, Escape, accessible media control, and clean shutdown.'
+    Write-Host 'PASS: startup, hover stays compact, click expansion/collapse, pointer leave, rapid reversal, Escape, drag separation, transparent margin hit testing, accessible media control, and clean shutdown.'
 } finally {
     if (!$process.HasExited) { Stop-Process -Id $process.Id -Force }
 }
